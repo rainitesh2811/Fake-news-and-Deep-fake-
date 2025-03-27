@@ -7,14 +7,13 @@ import string
 from sklearn.feature_extraction.text import TfidfVectorizer
 import seaborn as sns
 import matplotlib.pyplot as plt
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
 
 # Load data
-data_fake = pd.read_csv('c:/Users/Mantoo/Desktop/Projects/all py/all py/Fake.csv')
-data_true = pd.read_csv('c:/Users/Mantoo/Desktop/Projects/all py/all py/True.csv')
+data_fake = pd.read_csv('Fake.csv')
+data_true = pd.read_csv('True.csv')
 
 # Label data
 data_fake["class"] = 0
@@ -61,62 +60,26 @@ vectorizer = TfidfVectorizer(max_features=5000)
 x_train_vec = vectorizer.fit_transform(x_train).toarray()
 x_test_vec = vectorizer.transform(x_test).toarray()
 
-# Convert data to PyTorch tensors
-x_train_tensor = torch.tensor(x_train_vec, dtype=torch.float32)
-y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).unsqueeze(1)
-x_test_tensor = torch.tensor(x_test_vec, dtype=torch.float32)
-y_test_tensor = torch.tensor(y_test.values, dtype=torch.float32).unsqueeze(1)
+# Build Feed-Forward Neural Network model
+model = Sequential()
+model.add(Dense(512, input_shape=(5000,), activation='relu'))
+model.add(Dense(256, activation='relu'))
+model.add(Dense(1, activation='sigmoid'))
 
-# Create DataLoader
-train_dataset = TensorDataset(x_train_tensor, y_train_tensor)
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-
-# Define the neural network model
-class FeedForwardNN(nn.Module):
-    def __init__(self):
-        super(FeedForwardNN, self).__init__()
-        self.fc1 = nn.Linear(5000, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 1)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-        self.dropout = nn.Dropout(0.5)  
-
-    def forward(self, x):
-        x = self.relu(self.fc1(x))
-        x = self.dropout(x) 
-        x = self.relu(self.fc2(x))
-        x = self.dropout(x) 
-        x = self.sigmoid(self.fc3(x))
-        return x
-
-model = FeedForwardNN()
-
-# Define loss function and optimizer
-criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
 # Train the model
-num_epochs = 10
-for epoch in range(num_epochs):
-    for inputs, labels in train_loader:
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item()}')
+model.fit(x_train_vec, y_train, epochs=10, batch_size=64, validation_data=(x_test_vec, y_test))
 
 # Predict and evaluate the model
-with torch.no_grad():
-    y_pred = model(x_test_tensor)
-    y_pred = (y_pred > 0.5).float()
-    accuracy = accuracy_score(y_test_tensor, y_pred)
-    print(f'Feed-Forward Neural Network Model Accuracy: {accuracy}')
-    print(classification_report(y_test_tensor, y_pred))
+y_pred = (model.predict(x_test_vec) > 0.5).astype("int32")
+accuracy = accuracy_score(y_test, y_pred)
+print(f'Feed-Forward Neural Network Model Accuracy: {accuracy}')
+print(classification_report(y_test, y_pred))
 
 # Confusion matrix
-cm = confusion_matrix(y_test_tensor, y_pred)
+cm = confusion_matrix(y_test, y_pred)
 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Fake', 'True'], yticklabels=['Fake', 'True'])
 plt.xlabel('Predicted')
 plt.ylabel('Actual')
@@ -127,10 +90,7 @@ plt.show()
 def manual_testing(news):
     processed_news = wordopt(news)
     vec = vectorizer.transform([processed_news]).toarray()
-    vec_tensor = torch.tensor(vec, dtype=torch.float32)
-    with torch.no_grad():
-        prediction = model(vec_tensor)
-        prediction = (prediction > 0.5).float()
+    prediction = (model.predict(vec) > 0.5).astype("int32")
     return "Fake News" if prediction[0] == 0 else "True News"
 
 # Input for manual testing
